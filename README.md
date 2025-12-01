@@ -4,9 +4,7 @@ A Python script to scrape and download videos from Flim.ai.
 
 ## Demo
 
-<iframe src="https://player.vimeo.com/video/1142171332" width="100%" height="400" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
-
-[Watch on Vimeo](https://vimeo.com/1142171332)
+Setting up Auth and Scraping 100 Videos: [Watch on Vimeo](https://vimeo.com/1142171332)
 
 ## Setup
 
