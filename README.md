@@ -4,9 +4,9 @@ Python scripts to scrape and download videos/images from Flim.ai and Frameset.
 
 ## Demo
 
-(Flim) Setting up Auth and Scraping 100 Videos: [Watch on Vimeo](https://vimeo.com/1142171332)
+(Flim) Setting up Auth and Scraping 100 Videos: ~11 Videos/Second [Watch on Vimeo](https://vimeo.com/1142171332)
 
-(Frameset) Setting up Auth and Scraping Videos: [Watch on Vimeo](https://vimeo.com/1142266850)
+(Frameset) Setting up Auth and Scraping Videos: ~4.5 Shots/Second [Watch on Vimeo](https://vimeo.com/1142266850)
 
 ## Setup
 
