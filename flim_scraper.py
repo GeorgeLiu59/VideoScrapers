@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 AUTH_TOKEN = os.getenv("FLIM_AUTH_TOKEN")
 
-TARGET_COUNT = 2000
+TARGET_COUNT = 10000
 OUTPUT_FOLDER = Path("flim_downloads")
 MAX_WORKERS = 8
 
@@ -152,7 +152,7 @@ def download_video(item, index, total):
         return
     
     video_urls = item.get("video_urls", {})
-    url = video_urls.get("url_thumbnail")
+    url = video_urls.get("url_full")
     if not url:
         return
     
