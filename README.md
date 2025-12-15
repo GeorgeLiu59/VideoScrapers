@@ -23,3 +23,31 @@ Each scraper has its own directory with setup instructions, configuration option
 2. Follow the setup instructions in that directory's README
 3. Configure the scraper settings as needed
 4. Run the scraper script
+
+## S3 Upload with s5cmd
+
+This repository includes `generate_upload_plan.py` for generating s5cmd upload commands to S3. The script:
+
+- Scans a source directory for `.mp4` files
+- Uses MD5 hash-based sharding (first 2 characters) to organize files into subdirectories
+- Generates s5cmd `cp` commands in the format: `s3://BUCKET/PREFIX/shard/filename.mp4`
+
+**Usage:**
+
+1. Edit `generate_upload_plan.py` and configure:
+   - `BUCKET`: Your S3 bucket name
+   - `PREFIX`: S3 prefix/folder (default: "videos")
+   - `SOURCE`: Local directory containing video files
+   - `OUTPUT`: Output file for upload commands (default: "s3_upload_plan.txt")
+
+2. Run the script:
+   ```bash
+   python generate_upload_plan.py
+   ```
+
+3. Execute the generated upload plan with s5cmd:
+   ```bash
+   s5cmd run s3_upload_plan.txt
+   ```
+
+The sharding strategy distributes files across subdirectories based on filename hash, helping to avoid S3 prefix hotspots.
