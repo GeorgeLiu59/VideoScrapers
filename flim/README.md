@@ -1,6 +1,6 @@
-# Flim Scraper
+# Flim Scrapers
 
-Python script to scrape and download videos from Flim.ai.
+Python scripts to scrape and download videos and still images from Flim.ai.
 
 ## Setup
 
@@ -29,25 +29,53 @@ Python script to scrape and download videos from Flim.ai.
 
 ## Usage
 
+### Video Scraper
+
 ```bash
-python flim_scraper.py
+python flim_video_scraper.py
+```
+
+### Still Scraper
+
+```bash
+python flim_still_scraper.py
 ```
 
 ## Configuration
 
-Edit these variables in `flim_scraper.py`:
+### Video Scraper
+
+Edit these variables in `flim_video_scraper.py`:
 
 - `TARGET_COUNT`: Number of items to fetch (default: 10000)
 - `OUTPUT_FOLDER`: Where to save files (default: "flim_downloads")
 - `MAX_DOWNLOAD_WORKERS`: Number of parallel downloads (default: 48)
 - `METADATA_WORKERS`: Number of parallel metadata fetchers (default: 8)
 
+### Still Scraper
+
+Edit these variables in `flim_still_scraper.py`:
+
+- `TARGET_COUNT`: Number of items to fetch (default: 10000)
+- `OUTPUT_FOLDER`: Where to save files (default: "flim_still_downloads")
+- `MAX_DOWNLOAD_WORKERS`: Number of parallel downloads (default: 48)
+- `METADATA_WORKERS`: Number of parallel metadata fetchers (default: 8)
+
 ## Output
+
+### Video Scraper
 
 - Videos are saved as `{id}.mp4` in the output folder
 - Metadata is saved to `_metadata.json`
 - Look up video info by searching for the ID in the metadata file
 - Only videos with `has_video_urls: true` are downloaded
+
+### Still Scraper
+
+- Still images are saved as `{id}.png`, `{id}.jpg`, or `{id}.jpeg` in the output folder
+- Metadata is saved to `_metadata.json`
+- Look up image info by searching for the ID in the metadata file
+- Only stills with `has_video_urls: false` and `full_resolution_url` are downloaded
 
 ## Notes
 
