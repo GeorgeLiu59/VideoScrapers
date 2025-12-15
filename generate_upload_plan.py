@@ -3,7 +3,7 @@ import hashlib
 
 # --- CONFIGURATION ---
 BUCKET = "BUCKET NAME"      
-PREFIX = "videos"              # <--- NEW FOLDER
+PREFIX = "videos"
 SOURCE = "SOURCE DIRECTORY"
 OUTPUT = "s3_upload_plan.txt"
 # ---------------------
@@ -22,11 +22,10 @@ def main():
                 if entry.is_file() and entry.name.endswith(".mp4"):
                     fname = entry.name
 
-                    # 1. Hash Sharding
+                    # Hash Sharding
                     hash_obj = hashlib.md5(fname.encode('utf-8'))
                     shard = hash_obj.hexdigest()[:2]
 
-                    # 2. Path: s3://moodio-content/videos/a1/video.mp4
                     cmd = f"cp {entry.path} s3://{BUCKET}/{PREFIX}/{shard}/{fname}\n"
 
                     f.write(cmd)
