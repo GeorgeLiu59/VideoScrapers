@@ -4,6 +4,7 @@ import logging
 import time
 import os
 import base64
+import math
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,10 +15,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 AUTH_TOKEN = os.getenv("FLIM_AUTH_TOKEN")
-
 TARGET_COUNT = 10000
 OUTPUT_FOLDER = Path("flim_downloads")
-MAX_DOWNLOAD_WORKERS = 48  
+
+MAX_DOWNLOAD_WORKERS = 48
+METADATA_WORKERS = 8
 
 session = requests.Session()
 
@@ -25,19 +27,10 @@ headers = {
     "authority": "api.flim.ai",
     "accept": "*/*",
     "accept-encoding": "gzip, deflate, br, zstd",
-    "accept-language": "en-US,en;q=0.9",
     "authorization": AUTH_TOKEN,
     "content-type": "application/json",
-    "feature-flag": "blockVisitors",
     "origin": "https://app.flim.ai",
-    "priority": "u=1, i",
     "referer": "https://app.flim.ai/",
-    "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-site",
     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 }
 session.headers.update(headers)
@@ -48,7 +41,11 @@ retry_strategy = Retry(
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["HEAD", "GET", "POST", "OPTIONS"]
 )
-adapter = HTTPAdapter(pool_connections=MAX_DOWNLOAD_WORKERS, pool_maxsize=MAX_DOWNLOAD_WORKERS, max_retries=retry_strategy)
+adapter = HTTPAdapter(
+    pool_connections=MAX_DOWNLOAD_WORKERS, 
+    pool_maxsize=MAX_DOWNLOAD_WORKERS, 
+    max_retries=retry_strategy
+)
 session.mount("https://", adapter)
 session.mount("http://", adapter)
 
@@ -90,12 +87,10 @@ def get_payload(page):
                 "shot_types": [],
                 "number_of_persons": [],
                 "years": [],
-                "safety_content": ["nudity", "violence"]
+                "safety_content": []
             }
         },
         "page": page,
-        "sort_by": "",
-        "order_by": "",
         "number_per_pages": 200
     }
 
@@ -122,7 +117,6 @@ def check_token_expiry(token):
 def fetch_page(page):
     url = "https://api.flim.ai/2.0.0/search"
     try:
-        # Using 'session.post' is faster than 'requests.post' due to connection reuse
         response = session.post(url, json=get_payload(page), timeout=30)
         if response.status_code == 200:
             data = response.json()
@@ -150,7 +144,6 @@ def save_metadata(new_items, existing_items):
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
     filepath = OUTPUT_FOLDER / "_metadata.json"
     
-    # Merge existing and new
     existing_ids = {item.get("id") for item in existing_items if item.get("id")}
     final_list = existing_items.copy()
     
@@ -192,6 +185,32 @@ def download_video(item, index, total):
     except Exception as e:
         logger.error(f"[{index}/{total}] Error: {filename} - {e}")
 
+def fetch_metadata_batch(existing_ids):
+    pages_to_fetch = TARGET_COUNT // 200 - 1
+    logger.info(f"Fetching {pages_to_fetch} pages concurrently...")
+    
+    all_fetched_images = []
+    
+    with ThreadPoolExecutor(max_workers=METADATA_WORKERS) as executor:
+        future_to_page = {executor.submit(fetch_page, p): p for p in range(pages_to_fetch)}
+        
+        for future in as_completed(future_to_page):
+            try:
+                images = future.result()
+                if images:
+                    new_batch = [img for img in images if img.get("id") not in existing_ids]
+                    if new_batch:
+                        all_fetched_images.extend(new_batch)
+                        # --- CHANGED: LOGGING EVERY PAGE ---
+                        logger.info(f"Page {future_to_page[future]}: Found {len(new_batch)} new items.")
+            except Exception:
+                pass
+
+    unique_items_map = {item['id']: item for item in all_fetched_images}
+    final_new_items = list(unique_items_map.values())
+    
+    logger.info(f"Parallel fetch complete. Found {len(final_new_items)} new unique items.")
+    return final_new_items
 
 def main():
     start_time = time.time()
@@ -207,54 +226,20 @@ def main():
             logger.error("Token has expired.")
             return
 
-    # 1. Load Existing Data
     existing_items = load_existing_metadata()
     existing_ids = {item.get("id") for item in existing_items if item.get("id")}
     
-    # 2. Fetch New Metadata (Original Logic: loop until we get TARGET_COUNT new items)
-    logger.info(f"Fetching metadata for {TARGET_COUNT} NEW items...")
+    new_collected_items = fetch_metadata_batch(existing_ids)
     
-    new_collected_items = []
-    page = 0
-    skipped_count = 0
-    
-    # Loop continues until we have enough NEW items
-    while len(new_collected_items) < TARGET_COUNT:
-        images = fetch_page(page)
-        if not images:
-            logger.info("No more results from API.")
-            break
-        
-        # Filter duplicates against what we ALREADY had on disk
-        batch_new_items = [img for img in images if img.get("id") not in existing_ids]
-        
-        # Also filter against what we just collected in this run (in case of API duplicates)
-        batch_new_items = [img for img in batch_new_items if img.get("id") not in {x['id'] for x in new_collected_items}]
-        
-        skipped_in_this_batch = len(images) - len(batch_new_items)
-        skipped_count += skipped_in_this_batch
-        
-        new_collected_items.extend(batch_new_items)
-        logger.info(f"Page {page}: Found {len(batch_new_items)} new items (Total new: {len(new_collected_items)}/{TARGET_COUNT})")
-        
-        # Stop condition: If we found duplicates previously, and this page is purely duplicates, we assume we hit the 'old' data.
-        if not batch_new_items and skipped_count > 0:
-            logger.info("Hit a page of purely duplicate items. Stopping fetch.")
-            break
-            
-        page += 1
-    
-    # 3. Save Metadata
     if new_collected_items:
-        all_items = save_metadata(new_collected_items, existing_items)
+        items_to_save = new_collected_items[:TARGET_COUNT]
+        all_items = save_metadata(items_to_save, existing_items)
     else:
         logger.info("No new items found.")
         all_items = existing_items
+        items_to_save = []
 
-    # 4. Download Videos (Optimized: Parallel)
-    # We attempt to download videos for ALL items (just in case previous runs failed downloads)
-    # But the 'download_video' function has a check: 'if filepath.exists(): return'
-    videos = [item for item in all_items if item.get("has_video_urls")]
+    videos = [item for item in items_to_save if item.get("has_video_urls")]
     
     logger.info(f"Verifying/Downloading {len(videos)} videos with {MAX_DOWNLOAD_WORKERS} threads...")
     
@@ -264,7 +249,6 @@ def main():
                 executor.submit(download_video, item, i+1, len(videos)) 
                 for i, item in enumerate(videos)
             ]
-            # Wait for all downloads to finish
             for future in as_completed(futures):
                 pass
     
